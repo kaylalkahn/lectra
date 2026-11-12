@@ -24,8 +24,9 @@ const staticHost = () => http.createServer((req, res) => {
   if (!f.startsWith(docs) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404, { 'content-type': 'text/html' }); return res.end('<h1>404</h1>'); }
   res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res);
 });
-const server = await new Promise((r) => { const s = (MODE === 'server' ? createApp({ dataDir: dir }) : staticHost()).listen(0, () => r(s)); });
-const url = `http://127.0.0.1:${server.address().port}/${MODE === 'server' ? '' : 'lectra/'}`;
+// URL=https://… runs the static flow against a deployed site instead (e.g. the live GitHub Pages link).
+const server = process.env.URL ? { close() {} } : await new Promise((r) => { const s = (MODE === 'server' ? createApp({ dataDir: dir }) : staticHost()).listen(0, () => r(s)); });
+let url = process.env.URL || `http://127.0.0.1:${server.address().port}/${MODE === 'server' ? '' : 'lectra/'}`;
 console.log('mode:', MODE, url);
 
 const pdf = `%PDF-1.4
@@ -62,6 +63,8 @@ const step = (m) => console.log('✓', m);
 const wait = (ms) => page.waitForTimeout(ms);
 
 await page.goto(url);
+await page.waitForSelector('#rec');
+url = new URL('.', page.url()).href; // follow the root -> docs/ redirect on Pages
 if (MODE === 'server') {
 await page.waitForSelector('#auth:not([hidden])');
 // wrong password path
@@ -205,7 +208,7 @@ await p2.waitForSelector('.item h3:has-text("Crash test")', { timeout: 10000 });
 step('interrupted recording recovered into library');
 
 if (MODE === 'static') {
-  const bad = []; p2.on('request', (r) => { if (!r.url().startsWith(url) && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) bad.push(r.url()); });
+  const bad = []; p2.on('request', (r) => { if (new URL(r.url()).origin !== new URL(url).origin && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) bad.push(r.url()); });
   await p2.reload(); await p2.waitForSelector('.item'); assert.deepEqual(bad, [], 'no third-party requests');
   step('no third-party network requests');
 }
