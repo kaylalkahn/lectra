@@ -134,3 +134,9 @@ test('rate limit counts failures only: many good logins never lock you out, bad 
   for (let i = 0; i < 25; i++) last = (await c('POST', '/api/auth/login', { email: 'rl@x.io', password: 'nope-nope' })).status;
   assert.equal(last, 429);
 });
+
+test('healthz reports ok (used by host health checks)', async () => {
+  const res = await fetch(base + '/healthz');
+  assert.equal(res.status, 200);
+  assert.equal(await res.text(), 'ok');
+});

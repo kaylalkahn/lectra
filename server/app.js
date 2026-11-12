@@ -281,6 +281,8 @@ export function createApp({ dataDir, secureCookies = false, maxLectureBytes = 4 
     res.json({ ok: true });
   });
 
+  app.get('/healthz', (req, res) => { db.prepare('SELECT 1').get(); res.type('text').send('ok'); });
+
   // ---------- static ----------
   app.use('/vendor/pdfjs', express.static(path.join(root, 'node_modules/pdfjs-dist/build')));
   app.use(express.static(path.join(root, 'public')));

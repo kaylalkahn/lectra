@@ -13,6 +13,14 @@ Microphone and screen capture only work on `localhost` or HTTPS.
 
 Config (environment variables, see `.env.example`): `PORT`, `DATA_DIR` (SQLite db + recordings, default `./data`), `COOKIE_SECURE=1` when served over HTTPS, `TRUST_PROXY=1` behind a reverse proxy, `MAX_LECTURE_MB`.
 
+## Deploy (public link)
+The app is one Node process plus a data folder, so any host that runs a Dockerfile works. Microphone capture needs **HTTPS**, which these hosts provide.
+
+- **Fly.io (recommended, keeps data):** `fly launch --no-deploy --copy-config`, `fly volumes create lectra_data --size 3`, `fly deploy`. Uses `fly.toml`. Needs an account with a card on file.
+- **Render (quickest, data resets):** New > Blueprint > pick this repo (uses `render.yaml`). The free plan has an ephemeral disk, so accounts/recordings are lost on restart or sleep. Add a paid persistent disk to keep them.
+- Set `COOKIE_SECURE=1` and `TRUST_PROXY=1` behind HTTPS (already set in the configs). Health check: `GET /healthz`.
+- The `Dockerfile` and host configs were **not build-tested** in the development sandbox (no container runtime). The production install (`npm ci --omit=dev` + `node server/index.js`) was tested.
+
 ## What it does
 - Accounts (email + password), per-user private library.
 - **Screen and voice:** share a screen/window/tab; its audio (if offered) is mixed with the mic.
