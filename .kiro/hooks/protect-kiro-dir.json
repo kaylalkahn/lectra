@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Never ignore the .kiro directory",
+      "trigger": "PostFileSave",
+      "description": "Fails loudly if .gitignore ever lists .kiro, which would disqualify the hackathon submission.",
+      "matcher": "\\.gitignore$",
+      "action": {
+        "type": "command",
+        "command": "f=$(find . -maxdepth 2 -name .gitignore -not -path '*/node_modules/*' | head -5); if grep -nE '^\\s*/?\\.kiro' $f 2>/dev/null; then echo 'ERROR: .gitignore ignores .kiro. The hackathon requires /.kiro to be committed. Remove that line.' >&2; exit 1; else echo '.gitignore OK: .kiro is tracked'; fi",
+        "timeout": 15
+      }
+    }
+  ]
+}

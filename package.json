@@ -1,0 +1,24 @@
+{
+  "name": "lectra",
+  "version": "1.0.0",
+  "description": "Record lectures, pin moments, revise later",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "start": "node server/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.3.0",
+    "pdfjs-dist": "^6.5.438"
+  },
+  "devDependencies": {
+    "fast-check": "^4.10.2"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

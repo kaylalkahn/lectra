@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Lectra: rewind your understanding</title>
+<link rel="preload" href="/fonts/instrument-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top" id="top">
+  <div class="logo"><svg viewBox="0 0 34 22" aria-hidden="true"><rect x=".75" y=".75" width="32.5" height="20.5" rx="4" fill="none" stroke="#ece7da" stroke-width="1.5"/><circle cx="11" cy="11" r="4.5" fill="none" stroke="#ece7da" stroke-width="1.5"/><circle cx="23" cy="11" r="4.5" fill="none" stroke="#ece7da" stroke-width="1.5"/></svg>LECTRA<sup>®</sup></div>
+  <nav><button class="tab" id="tab-record" data-go="record" aria-current="page"><span class="dot"></span>Record</button><button class="tab" id="tab-library" data-go="library">Library</button><button class="tab acct" id="logout" hidden title="Log out">Log out</button></nav>
+</header>
+
+<main id="record">
+  <h1>Record it once. Revise it any time.</h1>
+  <p class="lede">The speaker’s voice is always recorded. Add the screen or slide deck they are presenting, and Lectra keeps the recording and your timestamped notes together on your account.</p>
+  <div class="banner" id="unsupported" hidden>This browser can’t record. Lectra needs MediaRecorder and microphone access. Use a recent Chrome, Edge, Firefox or Safari over HTTPS or localhost. Your library still works.</div>
+  <div class="grid" id="rgrid">
+    <section>
+      <label class="field" for="topic">Lecture topic</label>
+      <input id="topic" type="text" maxlength="120" placeholder="e.g. Advanced Quantum Mechanics" autocomplete="off">
+      <div class="seg" role="group" aria-label="Capture mode">
+        <button data-mode="Screen and voice" aria-pressed="true">Screen and voice</button>
+        <button data-mode="Slides and voice" aria-pressed="false">Slides and voice</button>
+      </div>
+      <p class="small" id="modehelp">Both are saved as a video.</p>
+      <div class="slides" id="slides" hidden>
+        <canvas id="slideCanvas" width="1280" height="720" aria-label="Slide preview, this is what gets recorded"></canvas>
+        <div class="slidebar">
+          <label class="link filelabel">Load slides<input class="sr" type="file" id="slideFile" accept="application/pdf,image/*" multiple></label>
+          <button class="link" id="prevSlide" disabled aria-label="Previous slide">‹ Prev</button>
+          <span class="small" id="slideCount">No slides loaded</span>
+          <button class="link" id="nextSlide" disabled aria-label="Next slide">Next ›</button>
+        </div>
+        <p class="small" style="margin-top:8px">PDF or images. Use the Left and Right arrow keys to change slides, even while recording.</p>
+      </div>
+      <div class="stage" id="stageTape"></div>
+      <div class="readout"><div class="time" id="clock" role="timer">00:00:00</div><div class="status"><span id="state" aria-live="polite">ready</span></div></div>
+      <div class="controls">
+        <button class="recbtn" id="rec" aria-label="Start recording"><i></i></button>
+        <button class="ctl" id="rew" disabled aria-label="Jump to previous pin"><svg viewBox="0 0 24 24"><path d="M11 6v12L2 12zM22 6v12l-9-6z"/></svg></button>
+        <button class="ctl" id="pause" disabled aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+        <button class="ctl" id="ff" disabled aria-label="Jump to next pin"><svg viewBox="0 0 24 24"><path d="M13 6v12l9-6zM2 6v12l9-6z"/></svg></button>
+      </div>
+    </section>
+    <aside>
+      <div class="stats">
+        <div><b id="n">0</b><span>lectures saved</span></div>
+        <div><b id="tot">0s</b><span>recorded</span></div>
+        <div><b id="streak">0</b><span>day streak</span></div>
+      </div>
+      <div class="pinhead"><p class="field" style="margin-bottom:0">Pinned moments</p><button class="link" id="pinbtn" disabled>Pin moment</button></div>
+      <ul class="notes" id="notes"></ul>
+      <p class="small" style="margin-top:14px">Press Enter while recording (or use Pin moment) to pin a timestamped note. When you stop, Lectra saves the recording as a cassette in your library.</p>
+    </aside>
+  </div>
+</main>
+
+<main id="library" hidden>
+  <div class="head">
+    <div><h1 style="margin-bottom:10px">Library</h1><p class="lede" style="margin:0">Every recording and set of notes on your Lectra account, one cassette per lecture.</p></div>
+    <div class="libhead"><input id="q" type="text" placeholder="Search your cassettes" aria-label="Search your cassettes"><button class="btn" data-go="record">New recording</button></div>
+  </div>
+  <div class="shelf" id="shelf"></div>
+  <div class="empty" id="empty"><div class="ghost" id="ghost"></div><p>Nothing recorded yet. Your lectures show up here as soon as you finish one.</p><button class="btn" data-go="record">Record a lecture</button></div>
+</main>
+
+<dialog id="player" aria-label="Lecture player">
+  <div class="dlg">
+    <div class="dlg-head">
+      <input class="dlg-title" id="pTitle" maxlength="120" aria-label="Lecture name">
+      <button class="link" id="pClose">Close</button>
+    </div>
+    <video id="pVideo" controls preload="metadata" playsinline></video>
+    <p class="small dlg-meta mono" id="pMeta"></p>
+    <p class="field" style="margin-bottom:0">Pinned moments</p>
+    <ul class="notes" id="pPins"></ul>
+    <div class="dlg-actions">
+      <a class="link" id="pDownload" href="#">Download</a>
+      <button class="link danger" id="pDelete">Delete lecture</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="auth" id="auth" hidden>
+  <form id="authForm" novalidate>
+    <div class="logo"><svg viewBox="0 0 34 22" width="34" height="22" aria-hidden="true"><rect x=".75" y=".75" width="32.5" height="20.5" rx="4" fill="none" stroke="#ece7da" stroke-width="1.5"/><circle cx="11" cy="11" r="4.5" fill="none" stroke="#ece7da" stroke-width="1.5"/><circle cx="23" cy="11" r="4.5" fill="none" stroke="#ece7da" stroke-width="1.5"/></svg>LECTRA<sup>®</sup></div>
+    <h2 id="authTitle">Welcome back</h2>
+    <p class="lede" style="margin-bottom:22px">Log in to keep your lectures on your account.</p>
+    <div class="seg" role="group" aria-label="Account">
+      <button type="button" data-auth="login" aria-pressed="true">Log in</button>
+      <button type="button" data-auth="signup" aria-pressed="false">Create account</button>
+    </div>
+    <div style="height:22px"></div>
+    <label class="field" for="aEmail">Email</label>
+    <input id="aEmail" type="email" autocomplete="email" required>
+    <label class="field" for="aPass">Password <span id="passHint"></span></label>
+    <input id="aPass" type="password" autocomplete="current-password" required minlength="8">
+    <p class="err" id="authErr" role="alert"></p>
+    <button class="btn" id="authSubmit" type="submit">Log in</button>
+  </form>
+</div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
