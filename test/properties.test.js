@@ -7,6 +7,8 @@ import path from 'node:path';
 import fc from 'fast-check';
 import { fmt, short } from '../docs/format.js';
 import { streak } from '../docs/streak.js';
+import { seekTarget } from '../docs/transport.js';
+import { deriveKey, sealBytes, openBytes, sealJSON, openJSON } from '../docs/crypto.js';
 import { createApp } from '../server/app.js';
 
 const BASE = Date.UTC(2026, 0, 1);
@@ -55,6 +57,48 @@ test('streak is 0 when the most recent lecture is 2+ days old, and never exceeds
       assert.equal(streak(dates, today), 0);
       assert.ok(streak(dates, isoDay(60)) <= new Set(dates).size);
     }));
+});
+
+// R3.4: Rewind/Fast-forward behave like a tape deck: move at most 15 s, never past either end, never skip a pin.
+const pinsArb = fc.array(fc.integer({ min: 0, max: 600 }), { maxLength: 12 });
+test('rewind stays within 15 s, stops at the nearest earlier pin, never skips one', () => {
+  fc.assert(fc.property(pinsArb, fc.double({ min: 0, max: 600, noNaN: true }), (pins, t) => {
+    const r = seekTarget(pins, t, -1);
+    assert.ok(r >= Math.max(0, t - 15) - 1e-9 && r <= t, `r=${r} t=${t}`);
+    assert.ok(!pins.some((a) => a > r && a < t - 1), 'skipped a pin');
+  }));
+});
+test('fast forward stays within 15 s and the end, stops at the nearest later pin, never skips one', () => {
+  fc.assert(fc.property(pinsArb, fc.double({ min: 0, max: 600, noNaN: true }), fc.double({ min: 0, max: 700, noNaN: true }), (pins, t, end) => {
+    const f = seekTarget(pins, t, 1, { end });
+    assert.ok(f >= t && f <= Math.max(t, Math.min(end, t + 15)) + 1e-9, `f=${f} t=${t} end=${end}`);
+    assert.ok(!pins.some((a) => a > t + 0.5 && a < f), 'skipped a pin');
+  }));
+});
+test('repeated rewinds always reach 0 and repeated fast-forwards always reach the end (no getting stuck)', () => {
+  fc.assert(fc.property(pinsArb, fc.integer({ min: 0, max: 600 }), (pins, start) => {
+    let t = start, n = 0;
+    while (t > 0 && n++ < 200) t = seekTarget(pins, t, -1);
+    assert.equal(t, 0);
+    t = 0; n = 0;
+    while (t < 600 && n++ < 200) t = seekTarget(pins, t, 1, { end: 600 });
+    assert.equal(t, 600);
+  }));
+});
+
+// R1 (profiles): what one profile encrypts, only the same password can read; ciphertexts never repeat.
+test('profile encryption round-trips and rejects the wrong password', async () => {
+  const salt = new Uint8Array(16).fill(7);
+  const right = await deriveKey('correct horse', salt, 1000), wrong = await deriveKey('battery staple', salt, 1000);
+  await fc.assert(fc.asyncProperty(fc.uint8Array({ maxLength: 2048 }), fc.jsonValue(), async (bytes, json) => {
+    const sb = await sealBytes(right, bytes);
+    assert.ok(Buffer.from(await openBytes(right, sb)).equals(Buffer.from(bytes)));
+    await assert.rejects(openBytes(wrong, sb));
+    const sj = await sealJSON(right, json);
+    assert.deepEqual(await openJSON(right, sj), JSON.parse(JSON.stringify(json)));
+    const again = await sealBytes(right, bytes);
+    assert.notDeepEqual(Buffer.from(again.iv), Buffer.from(sb.iv));
+  }), { numRuns: 60 });
 });
 
 // R2.6: however the recorder splits the stream into chunks, and even if a chunk upload is retried,

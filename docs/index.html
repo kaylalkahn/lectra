@@ -40,12 +40,17 @@
         <p class="small" style="margin-top:8px">PDF or images. Use the Left and Right arrow keys to change slides, even while recording.</p>
       </div>
       <div class="stage" id="stageTape"></div>
+      <div class="replay" id="replay" hidden>
+        <video id="rVideo" muted playsinline controls aria-label="Instant replay"></video>
+        <div class="replaybar"><span class="small mono" id="rLabel">Instant replay</span><button class="link" id="rLive">Back to live</button></div>
+        <p class="small" style="margin-top:6px">Still recording. Replay is muted so it isn’t recorded again; unmute it if you’re on headphones.</p>
+      </div>
       <div class="readout"><div class="time" id="clock" role="timer">00:00:00</div><div class="status"><span id="state" aria-live="polite">ready</span></div></div>
       <div class="controls">
         <button class="recbtn" id="rec" aria-label="Start recording"><i></i></button>
-        <button class="ctl" id="rew" disabled aria-label="Jump to previous pin"><svg viewBox="0 0 24 24"><path d="M11 6v12L2 12zM22 6v12l-9-6z"/></svg></button>
+        <button class="ctl" id="rew" disabled aria-label="Rewind" title="Rewind: replay what was just said, without stopping the recording"><svg viewBox="0 0 24 24"><path d="M11 6v12L2 12zM22 6v12l-9-6z"/></svg></button>
         <button class="ctl" id="pause" disabled aria-label="Pause"><svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
-        <button class="ctl" id="ff" disabled aria-label="Jump to next pin"><svg viewBox="0 0 24 24"><path d="M13 6v12l9-6zM2 6v12l9-6z"/></svg></button>
+        <button class="ctl" id="ff" disabled aria-label="Fast forward" title="Fast forward through the replay, back to live"><svg viewBox="0 0 24 24"><path d="M13 6v12l9-6zM2 6v12l9-6z"/></svg></button>
       </div>
     </section>
     <aside>
@@ -56,7 +61,7 @@
       </div>
       <div class="pinhead"><p class="field" style="margin-bottom:0">Pinned moments</p><button class="link" id="pinbtn" disabled>Pin moment</button></div>
       <ul class="notes" id="notes"></ul>
-      <p class="small" style="margin-top:14px">Press Enter while recording (or use Pin moment) to pin a timestamped note. When you stop, Lectra saves the recording as a cassette in your library.</p>
+      <p class="small" style="margin-top:14px">Press Enter while recording (or use Pin moment) to pin a timestamped note. Missed something? Rewind replays it while Lectra keeps recording; fast forward takes you back to live. Rewind and fast forward move 15 seconds and stop at your pins.</p>
     </aside>
   </div>
 </main>
@@ -77,6 +82,12 @@
       <button class="link" id="pClose">Close</button>
     </div>
     <video id="pVideo" controls preload="metadata" playsinline></video>
+    <div class="dlg-ctl">
+      <button class="ctl" id="pRew" aria-label="Rewind" title="Rewind 15 s, stopping at pins"><svg viewBox="0 0 24 24"><path d="M11 6v12L2 12zM22 6v12l-9-6z"/></svg></button>
+      <button class="ctl" id="pPlay" aria-label="Play"><svg class="i-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7z"/></svg><svg class="i-pause" viewBox="0 0 24 24" hidden><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+      <button class="ctl" id="pFf" aria-label="Fast forward" title="Fast forward 15 s, stopping at pins"><svg viewBox="0 0 24 24"><path d="M13 6v12l9-6zM2 6v12l9-6z"/></svg></button>
+      <span class="small">Rewind and fast forward move 15 s and stop at your pins.</span>
+    </div>
     <p class="small dlg-meta mono" id="pMeta"></p>
     <p class="field" style="margin-bottom:0">Pinned moments</p>
     <ul class="notes" id="pPins"></ul>
@@ -91,18 +102,18 @@
   <form id="authForm" novalidate>
     <div class="logo"><svg viewBox="0 0 34 22" width="34" height="22" aria-hidden="true"><rect x=".75" y=".75" width="32.5" height="20.5" rx="4" fill="none" stroke="#ece7da" stroke-width="1.5"/><circle cx="11" cy="11" r="4.5" fill="none" stroke="#ece7da" stroke-width="1.5"/><circle cx="23" cy="11" r="4.5" fill="none" stroke="#ece7da" stroke-width="1.5"/></svg>LECTRA<sup>®</sup></div>
     <h2 id="authTitle">Welcome back</h2>
-    <p class="lede" style="margin-bottom:22px">Log in to keep your lectures on your account.</p>
+    <p class="lede" id="authLede" style="margin-bottom:22px">Log in to keep your lectures on your account.</p>
     <div class="seg" role="group" aria-label="Account">
       <button type="button" data-auth="login" aria-pressed="true">Log in</button>
       <button type="button" data-auth="signup" aria-pressed="false">Create account</button>
     </div>
     <div style="height:22px"></div>
-    <label class="field" for="aEmail">Email</label>
+    <label class="field" for="aEmail" id="aEmailLabel">Email</label>
     <input id="aEmail" type="email" autocomplete="email" required>
     <label class="field" for="aPass">Password <span id="passHint"></span></label>
     <input id="aPass" type="password" autocomplete="current-password" required minlength="8">
     <p class="err" id="authErr" role="alert"></p>
-    <button class="btn" id="authSubmit" type="submit">Log in</button>
+    <div class="authlinks"><button class="btn" id="authSubmit" type="submit">Log in</button><button class="textlink" type="button" id="forgot" hidden>Forgot password?</button></div>
   </form>
 </div>
 <div class="toast" id="toast" hidden role="status"></div>

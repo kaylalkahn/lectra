@@ -25,3 +25,10 @@
 - [x] 19. Local mode: no sign-in, copy says "in this browser", crash recovery from IndexedDB
 - [x] 20. e2e runs against a Pages-like static host under /lectra/ and against the server; assert no third-party requests
 - [x] 21. Enable GitHub Pages from `main:/docs`, set repo website link
+
+## Profiles + transport
+- [x] 22. `crypto.js` (PBKDF2 -> AES-GCM), `profiles.js` registry, encrypted LocalStore codecs (property tests: round trip, wrong key)
+- [x] 23. Login page on the public link; reload/Log out locks; Forgot password deletes one profile; adopt pre-profile lectures
+- [x] 24. `transport.js` seek rules (property tests: within 15 s, never skips a pin, always reaches both ends)
+- [x] 25. Instant replay while recording (rew/ff/pin click, Back to live); player rew / play-pause / ff
+- [x] 26. e2e: profile isolation, encryption at rest, wrong password, replay and transport in both modes

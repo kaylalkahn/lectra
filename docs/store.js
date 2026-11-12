@@ -4,6 +4,7 @@
  * detectStore() picks ServerStore only if a Lectra API answers next to the page. */
 import { api, ApiError, Uploader } from './api.js';
 import { streak } from './streak.js';
+import { sealBytes, openBytes, sealJSON, openJSON } from './crypto.js';
 
 const EXT = { 'video/webm': 'webm', 'video/mp4': 'mp4' };
 const baseMime = (m) => String(m || '').split(';')[0].trim().toLowerCase();
@@ -39,14 +40,17 @@ export class ServerStore {
 /* ---------------- browser (IndexedDB) ---------------- */
 const req = (r) => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const done = (tx) => new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error || new Error('Storage transaction aborted.')); });
+const range = (id) => IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]);
 function friendly(e) {
   if (e?.name === 'QuotaExceededError') return new ApiError(507, 'This browser is out of storage space. Delete or download old lectures to free some up.');
   return e instanceof Error ? e : new Error(String(e));
 }
 
+/** IndexedDB store. With `key` (a profile's AES key) every record is encrypted: only ids, lecture ids and
+ *  chunk numbers stay readable, so the database reveals nothing about names, notes or recordings. */
 export class LocalStore {
   kind = 'local';
-  constructor(dbName = 'lectra') { this.dbName = dbName; this.db = null; }
+  constructor(dbName = 'lectra', key = null) { this.dbName = dbName; this.key = key; this.db = null; }
   async open() {
     if (this.db) return this.db;
     const r = indexedDB.open(this.dbName, 1);
@@ -60,43 +64,52 @@ export class LocalStore {
     navigator.storage?.persist?.().catch(() => {}); // ask the browser not to evict recordings
     return this.db;
   }
+  close() { this.db?.close(); this.db = null; this.key = null; }
   async tx(stores, mode, fn) {
-    const db = await this.open();
-    const t = db.transaction(stores, mode);
-    const out = fn(...stores.map((s) => t.objectStore(s)));
+    const t = (await this.open()).transaction(stores, mode);
+    fn(...stores.map((s) => t.objectStore(s)));
     try { await done(t); } catch (e) { throw friendly(e); }
-    return out instanceof Promise ? out : out;
   }
+  async all(store, query) { return req((await this.open()).transaction(store).objectStore(store).getAll(query)); }
+  async put(store, rec) { await this.tx([store], 'readwrite', (s) => s.put(rec)); }
+
+  // ---- record codecs (encryption happens outside transactions: IDB transactions can't await crypto) ----
+  async encL(l) { return this.key ? { id: l.id, m: await sealJSON(this.key, l) } : l; }
+  async decL(r) { return r && (this.key ? openJSON(this.key, r.m) : r); }
+  async encP(p) { const { id, lectureId, at, note } = p; const base = id == null ? { lectureId } : { id, lectureId };
+    return this.key ? { ...base, m: await sealJSON(this.key, { at, note }) } : { ...base, at, note }; }
+  async decP(r) { return this.key ? { id: r.id, lectureId: r.lectureId, ...(await openJSON(this.key, r.m)) } : r; }
+  async encC(lectureId, seq, data) { return this.key ? { lectureId, seq, d: await sealBytes(this.key, data) } : { lectureId, seq, data }; }
+  async decC(r) { return this.key ? openBytes(this.key, r.d) : r.data; }
+
   async me() { await this.open(); return { local: true }; }
   async logout() {}
-
-  async lecture(id) { return this.tx(['lectures'], 'readonly', (l) => req(l.get(id))).then((p) => p); }
+  async lecture(id) { return this.decL(await req((await this.open()).transaction('lectures').objectStore('lectures').get(id))); }
+  async saveLecture(l) { await this.put('lectures', await this.encL(l)); }
+  async allLectures() { return Promise.all((await this.all('lectures')).map((r) => this.decL(r))); }
   async pinsOf(id) {
-    const db = await this.open();
-    return req(db.transaction('pins').objectStore('pins').index('lecture').getAll(id));
+    const recs = await req((await this.open()).transaction('pins').objectStore('pins').index('lecture').getAll(id));
+    return Promise.all(recs.map((r) => this.decP(r)));
   }
-  async allLectures() { const db = await this.open(); return req(db.transaction('lectures').objectStore('lectures').getAll()); }
 
   async recover() {
     let n = 0;
     for (const l of (await this.allLectures()).filter((x) => x.status === 'recording')) {
-      if (l.chunks > 0) { l.status = 'saved'; l.duration = l.elapsed; await this.tx(['lectures'], 'readwrite', (s) => s.put(l)); n++; }
-      else await this.remove(l.id);
+      if (l.chunks > 0) { l.status = 'saved'; l.duration = l.elapsed; await this.saveLecture(l); n++; } else await this.remove(l.id);
     }
     return n;
   }
   async list(today) {
     const rows = (await this.allLectures()).filter((l) => l.status === 'saved').sort((a, b) => b.createdAt - a.createdAt);
     const counts = new Map();
-    const db = await this.open();
-    for (const p of await req(db.transaction('pins').objectStore('pins').getAll())) counts.set(p.lectureId, (counts.get(p.lectureId) || 0) + 1);
+    for (const p of await this.all('pins')) counts.set(p.lectureId, (counts.get(p.lectureId) || 0) + 1); // lectureId is not secret
     const lectures = rows.map((l) => ({ id: l.id, name: l.name, mode: l.mode, duration: l.duration, date: l.date, size: l.size, pins: counts.get(l.id) || 0 }));
     return { lectures, stats: stats(lectures, today) };
   }
   async create({ name, mode, mime, date }) {
     const l = { id: crypto.randomUUID(), name, mode, mime: baseMime(mime) || 'video/webm', date, status: 'recording',
       duration: 0, size: 0, chunks: 0, elapsed: 0, createdAt: Date.now() };
-    await this.tx(['lectures'], 'readwrite', (s) => s.put(l));
+    await this.saveLecture(l);
     return l.id;
   }
   writer(id, onError) {
@@ -108,11 +121,11 @@ export class LocalStore {
         chain = chain.then(async () => {
           if (failed) return;
           const data = await blob.arrayBuffer(); // store bytes, not Blob: survives Safari/Firefox restarts reliably
-          await this.tx(['chunks', 'lectures'], 'readwrite', (c, ls) => {
-            c.put({ lectureId: id, seq: n, data });
-            const g = ls.get(id);
-            g.onsuccess = () => { const l = g.result; l.chunks = n + 1; l.size += data.byteLength; l.elapsed = elapsed; ls.put(l); };
-          });
+          const chunk = await this.encC(id, n, data);
+          const l = await this.lecture(id);
+          l.chunks = n + 1; l.size += data.byteLength; l.elapsed = elapsed;
+          const meta = await this.encL(l);
+          await this.tx(['chunks', 'lectures'], 'readwrite', (c, ls) => { c.put(chunk); ls.put(meta); }); // chunk + counters together
         }).catch((e) => { failed = true; onError?.(friendly(e)); });
       },
       flush: () => chain,
@@ -123,15 +136,19 @@ export class LocalStore {
     if (!l) throw new ApiError(404, 'Lecture not found.');
     if (!l.chunks) { await this.remove(id); throw new ApiError(400, 'Nothing was recorded.'); }
     l.status = 'saved'; l.duration = Math.max(0, duration | 0);
-    await this.tx(['lectures'], 'readwrite', (s) => s.put(l));
+    await this.saveLecture(l);
   }
   async addPin(id, at, note) {
+    const rec = await this.encP({ lectureId: id, at, note });
     let key;
-    await this.tx(['pins'], 'readwrite', (s) => { const r = s.add({ lectureId: id, at, note }); r.onsuccess = () => { key = r.result; }; });
+    await this.tx(['pins'], 'readwrite', (s) => { const r = s.add(rec); r.onsuccess = () => { key = r.result; }; });
     return key;
   }
   async editPin(pinId, note) {
-    await this.tx(['pins'], 'readwrite', (s) => { const g = s.get(pinId); g.onsuccess = () => { if (g.result) s.put({ ...g.result, note }); }; });
+    const r = await req((await this.open()).transaction('pins').objectStore('pins').get(pinId));
+    if (!r) return;
+    const p = await this.decP(r);
+    await this.put('pins', await this.encP({ ...p, note }));
   }
   async deletePin(pinId) { await this.tx(['pins'], 'readwrite', (s) => s.delete(pinId)); }
   async get(id) {
@@ -143,31 +160,40 @@ export class LocalStore {
   async rename(id, name) {
     const l = await this.lecture(id);
     if (!l) throw new ApiError(404, 'Lecture not found.');
-    l.name = name; await this.tx(['lectures'], 'readwrite', (s) => s.put(l));
+    l.name = name; await this.saveLecture(l);
   }
   async remove(id) {
-    const pins = await this.pinsOf(id);
     await this.tx(['lectures', 'chunks', 'pins'], 'readwrite', (ls, cs, ps) => {
-      ls.delete(id);
-      cs.delete(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER]));
-      pins.forEach((p) => ps.delete(p.id));
+      ls.delete(id); cs.delete(range(id));
+      const k = ps.index('lecture').getAllKeys(id);
+      k.onsuccess = () => k.result.forEach((x) => ps.delete(x));
     });
   }
   async media(id) {
     const l = await this.lecture(id);
-    const db = await this.open();
-    const chunks = await req(db.transaction('chunks').objectStore('chunks').getAll(IDBKeyRange.bound([id, 0], [id, Number.MAX_SAFE_INTEGER])));
-    const blob = new Blob(chunks.sort((a, b) => a.seq - b.seq).map((c) => c.data), { type: l.mime });
-    const url = URL.createObjectURL(blob);
+    const recs = (await this.all('chunks', range(id))).sort((a, b) => a.seq - b.seq);
+    const parts = [];
+    for (const r of recs) parts.push(await this.decC(r));
+    const url = URL.createObjectURL(new Blob(parts, { type: l.mime }));
     return { src: url, download: url, filename: fileName(l), release: () => URL.revokeObjectURL(url) };
+  }
+  /** Copy every saved lecture (video, pins) from another LocalStore into this one, keeping ids. */
+  async importFrom(src) {
+    let n = 0;
+    for (const l of (await src.allLectures()).filter((x) => x.status === 'saved')) {
+      for (const c of await src.all('chunks', range(l.id))) await this.put('chunks', await this.encC(l.id, c.seq, await src.decC(c)));
+      for (const p of await src.pinsOf(l.id)) await this.put('pins', await this.encP({ lectureId: l.id, at: p.at, note: p.note }));
+      await this.saveLecture(l); n++;
+    }
+    return n;
   }
 }
 
-/** Use the server only if one is actually there; otherwise run fully in the browser. */
+/** Returns a ServerStore if a Lectra server answers next to the page, otherwise null (browser-only mode). */
 export async function detectStore() {
   try {
     const res = await fetch('api/me', { credentials: 'same-origin' });
     if ((res.headers.get('content-type') || '').includes('application/json')) return new ServerStore();
   } catch { /* offline or static host */ }
-  return new LocalStore();
+  return null;
 }

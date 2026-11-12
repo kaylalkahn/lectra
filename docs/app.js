@@ -1,5 +1,7 @@
 import { ApiError } from './api.js';
-import { detectStore } from './store.js';
+import { detectStore, LocalStore } from './store.js';
+import * as profiles from './profiles.js';
+import { seekTarget } from './transport.js';
 import { cassette, esc, hash } from './cassette.js';
 import { Deck } from './slides.js';
 import { fmt, short } from './format.js';
@@ -11,9 +13,9 @@ const today = () => new Date().toLocaleDateString('en-CA');
 function toast(m) { const e = $('#toast'); e.textContent = m; e.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => { e.hidden = true; }, 3200); }
 function debounce(fn, ms) { let h; const d = (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; d.flush = (...a) => { clearTimeout(h); fn(...a); }; return d; }
 
-let store = null, user = null, lib = [], mode = 'Screen and voice';
+let store = null, local = false, user = null, lib = [], mode = 'Screen and voice';
 // recording session state: ready | starting | recording | paused | saving
-let state = 'ready', acc = 0, segStart = 0, clockTimer = null, pins = [], pi = -1, rs = null;
+let state = 'ready', acc = 0, segStart = 0, clockTimer = null, pins = [], rs = null, replay = null;
 
 /* ---------- view routing ---------- */
 function go(v) {
@@ -38,32 +40,58 @@ function setAuthMode(m) {
   $('#aPass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
   $('#passHint').textContent = m === 'signup' ? '(at least 8 characters)' : '';
   $('#authErr').textContent = '';
+  $('#forgot').hidden = !local || m !== 'login';
+}
+function configureAuth() {
+  $('#aEmailLabel').textContent = local ? 'Name' : 'Email';
+  $('#aEmail').type = local ? 'text' : 'email';
+  $('#aEmail').autocomplete = local ? 'username' : 'email';
+  $('#aEmail').maxLength = local ? 40 : 200;
+  if (local) $('#authLede').textContent = 'Everyone gets their own private library. Your lectures are encrypted with your password and never leave this browser.';
 }
 $$('[data-auth]').forEach((b) => { b.onclick = () => setAuthMode(b.dataset.auth); });
 $('#authForm').onsubmit = async (e) => {
   e.preventDefault();
   const btn = $('#authSubmit'); btn.disabled = true; $('#authErr').textContent = '';
   try {
-    const email = $('#aEmail').value, pass = $('#aPass').value;
-    user = authMode === 'login' ? await store.login(email, pass) : await store.signup(email, pass);
+    const id = $('#aEmail').value.trim(), pass = $('#aPass').value;
+    if (local) {
+      btn.textContent = authMode === 'login' ? 'Unlocking…' : 'Creating…';
+      const r = authMode === 'login' ? await profiles.unlock(id, pass) : await profiles.create(id, pass);
+      store = new LocalStore(profiles.dbName(r.profile), r.key);
+      user = { name: r.profile.name };
+      if (r.first) { const n = await profiles.adoptLegacy(store); if (n) setTimeout(() => toast(`Moved ${n} earlier lecture${n > 1 ? 's' : ''} into your profile.`), 50); }
+    } else {
+      user = authMode === 'login' ? await store.login(id, pass) : await store.signup(id, pass);
+    }
     $('#aPass').value = '';
     await enterApp();
   } catch (err) { $('#authErr').textContent = err.message; }
-  btn.disabled = false;
+  btn.disabled = false; btn.textContent = authMode === 'login' ? 'Log in' : 'Create account';
+};
+$('#forgot').onclick = async () => {
+  const name = $('#aEmail').value.trim();
+  if (!name) { $('#authErr').textContent = 'Type the profile name first.'; $('#aEmail').focus(); return; }
+  if (!confirm(`Passwords can’t be recovered: your lectures are encrypted with yours, and nothing is stored anywhere else.\n\nDelete the profile “${name}” and all of its lectures from this browser?`)) return;
+  try { await profiles.remove(name); $('#authErr').textContent = ''; setAuthMode('signup'); toast('Profile deleted. You can create a new one.'); }
+  catch (err) { $('#authErr').textContent = err.message; }
 };
 $('#logout').onclick = async () => {
   if (state !== 'ready') { toast('Stop your recording before logging out.'); return; }
-  await store.logout().catch(() => {});
-  user = null; lib = []; showAuth();
+  if (dlg.open) dlg.close();
+  if (local) { store?.close(); store = null; } else await store.logout().catch(() => {});
+  user = null; lib = []; setStats({ count: 0, totalSeconds: 0, streak: 0 }); renderLib(); showAuth();
 };
-function showAuth() {
+async function showAuth() {
   $('#auth').hidden = false; $('#logout').hidden = true;
   $('#record').hidden = true; $('#library').hidden = true;
-  setAuthMode('login'); $('#aEmail').focus();
+  $('#aEmail').value = ''; $('#aPass').value = '';
+  setAuthMode(local && !(await profiles.count().catch(() => 1)) ? 'signup' : 'login');
+  $('#aEmail').focus();
 }
 async function enterApp() {
-  $('#auth').hidden = true; $('#logout').hidden = store.kind === 'local';
-  $('#logout').title = user.email || '';
+  $('#auth').hidden = true; $('#logout').hidden = false;
+  $('#logout').title = `Signed in as ${user.email || user.name}`;
   try {
     const n = await store.recover();
     if (n) toast(`Recovered ${n} interrupted recording${n > 1 ? 's' : ''}.`);
@@ -121,7 +149,9 @@ function renderPins() {
   ul.innerHTML = '';
   pins.forEach((p, i) => {
     const li = document.createElement('li');
-    const at = document.createElement('span'); at.textContent = fmt(p.at);
+    const at = document.createElement('button'); at.className = 'pinat'; at.textContent = fmt(p.at);
+    at.setAttribute('aria-label', `Replay from ${fmt(p.at)}`); at.title = 'Replay from here';
+    at.onclick = () => replayAt(p.at);
     const inp = document.createElement('input');
     inp.className = 'pinnote'; inp.maxLength = 500; inp.value = p.note; inp.placeholder = 'Pinned moment: add a note';
     inp.setAttribute('aria-label', `Note for pin at ${fmt(p.at)}`);
@@ -129,7 +159,7 @@ function renderPins() {
     inp.oninput = () => { p.note = inp.value; save(inp.value); };
     inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } };
     const x = document.createElement('button'); x.className = 'pinx'; x.textContent = '×'; x.setAttribute('aria-label', 'Delete pin');
-    x.onclick = () => { pins.splice(i, 1); pi = -1; p.ready.then((id) => id != null && store.deletePin(id)).catch(() => {}); renderPins(); ui(); };
+    x.onclick = () => { pins.splice(i, 1); p.ready.then((id) => id != null && store.deletePin(id)).catch(() => {}); renderPins(); ui(); };
     li.append(at, inp, x); ul.append(li);
   });
 }
@@ -141,15 +171,65 @@ function addPin() {
   pins.push(p); renderPins(); ui();
   const inputs = $$('#notes .pinnote'); inputs[inputs.length - 1]?.scrollIntoView({ block: 'nearest' });
 }
-function stepPin(dir) {
-  if (!pins.length) return;
-  pi = dir < 0 ? (pi <= 0 ? pins.length - 1 : pi - 1) : (pi >= pins.length - 1 ? 0 : pi + 1);
-  $$('#notes .pinnote')[pi]?.focus();
-  toast(`Pin at ${fmt(pins[pi].at)}`);
-}
-$('#rew').onclick = () => stepPin(-1);
-$('#ff').onclick = () => stepPin(1);
 $('#pinbtn').onclick = addPin;
+
+/* ---------- WebM seeking: MediaRecorder files have no duration until the browser scans them once ---------- */
+function seekable(v) {
+  return new Promise((resolve) => {
+    const finish = () => { clearTimeout(guard); resolve(); };
+    const guard = setTimeout(resolve, 4000);
+    const fix = () => {
+      if (Number.isFinite(v.duration)) return finish();
+      const t = () => { v.removeEventListener('timeupdate', t); v.currentTime = 0; finish(); };
+      v.addEventListener('timeupdate', t);
+      v.currentTime = 1e101;
+    };
+    if (v.readyState >= 1) fix(); else v.addEventListener('loadedmetadata', fix, { once: true });
+  });
+}
+
+/* ---------- instant replay: rewind while still recording ---------- */
+const rv = $('#rVideo');
+async function snapshot(s) { // everything captured so far, as one playable video
+  if (s.mr.state !== 'inactive') await new Promise((r) => { s.mr.addEventListener('dataavailable', r, { once: true }); s.mr.requestData(); });
+  return new Blob(s.blobs, { type: s.mr.mimeType || 'video/webm' });
+}
+async function replayAt(t) {
+  const s = rs; if (!s || s.busy) return;
+  s.busy = true;
+  try {
+    const blob = await snapshot(s);
+    if (rs !== s) return;
+    if (!blob.size) { toast('Nothing to replay yet.'); return; }
+    if (replay) URL.revokeObjectURL(replay.url);
+    replay = { url: URL.createObjectURL(blob) };
+    rv.src = replay.url;
+    $('#replay').hidden = false; $('#stageTape').hidden = true;
+    await seekable(rv);
+    rv.currentTime = Math.max(0, Math.min(t, (Number.isFinite(rv.duration) ? rv.duration : t + 1) - 0.25));
+    rv.play().catch(() => {});
+  } finally { s.busy = false; ui(); }
+}
+function closeReplay() {
+  if (!replay) return;
+  rv.pause(); rv.removeAttribute('src'); rv.load(); URL.revokeObjectURL(replay.url); replay = null;
+  $('#replay').hidden = true; $('#stageTape').hidden = false; ui();
+}
+rv.addEventListener('timeupdate', () => { if (replay) $('#rLabel').textContent = `Instant replay · ${fmt(Math.floor(rv.currentTime))}`; });
+rv.addEventListener('ended', () => { if (replay) { closeReplay(); toast('Caught up. Back to live.'); } });
+$('#rLive').onclick = closeReplay;
+$('#rew').onclick = (e) => {
+  blurIfMouse(e);
+  if (!rs) return;
+  replayAt(seekTarget(pins, replay ? rv.currentTime : elapsedMs() / 1000, -1));
+};
+$('#ff').onclick = (e) => {
+  blurIfMouse(e);
+  if (!replay) return;
+  const end = Number.isFinite(rv.duration) ? rv.duration : rv.currentTime;
+  const t = seekTarget(pins, rv.currentTime, 1, { end });
+  if (t >= end - 0.75) { closeReplay(); toast('Back to live.'); } else rv.currentTime = t;
+};
 
 /* ---------- recording ---------- */
 function ui() {
@@ -165,7 +245,8 @@ function ui() {
   $('#pause').disabled = !active;
   $('#pause').setAttribute('aria-label', state === 'paused' ? 'Resume' : 'Pause');
   $('#pinbtn').disabled = !active;
-  $('#rew').disabled = $('#ff').disabled = !pins.length;
+  $('#rew').disabled = !active;
+  $('#ff').disabled = !replay;
   $('#topic').disabled = state !== 'ready';
   $$('.seg button[data-mode]').forEach((b) => { b.disabled = state !== 'ready' || (b.dataset.mode === 'Screen and voice' && !screenSupported()); });
 }
@@ -182,11 +263,11 @@ async function startRecording() {
     const mr = new MediaRecorder(cap.stream, mime ? { mimeType: mime } : undefined);
     id = await store.create({ name, mode, mime: mr.mimeType || mime, date: today() });
     const up = store.writer(id, (e) => { toast('Saving problem: ' + e.message); });
-    rs = { id, mr, cap, up, name, ended: false };
-    mr.ondataavailable = (e) => { up.push(e.data, elapsedSec()); };
+    const session = rs = { id, mr, cap, up, name, blobs: [], busy: false };
+    mr.ondataavailable = (e) => { if (!e.data.size) return; session.blobs.push(e.data); up.push(e.data, elapsedSec()); };
     mr.onerror = () => { toast('The recorder hit an error.'); stopRecording(); };
     cap.videoTrack.onended = () => { toast('Screen sharing ended. Saving your lecture.'); stopRecording(); };
-    acc = 0; segStart = performance.now(); pins = []; pi = -1;
+    acc = 0; segStart = performance.now(); pins = [];
     mr.start(5000);
     state = 'recording'; startClock(); renderPins(); ui();
     if (mode === 'Screen and voice' && !cap.hasSystemAudio) toast('Recording your voice. The shared screen has no audio of its own.');
@@ -199,6 +280,7 @@ async function startRecording() {
 async function stopRecording() {
   if (state !== 'recording' && state !== 'paused') return;
   const s = rs;
+  closeReplay();
   if (state === 'recording') acc += performance.now() - segStart; // freeze the clock at the true duration
   const duration = Math.floor(acc / 1000);
   state = 'saving'; clearInterval(clockTimer); ui();
@@ -215,13 +297,13 @@ async function stopRecording() {
   } catch (e) {
     if (!handleAuthLoss(e)) toast(e.message || 'Couldn’t finish saving. Reopen Lectra to recover what was captured.');
   }
-  rs = null; state = 'ready'; acc = 0; pins = []; pi = -1;
+  rs = null; state = 'ready'; acc = 0; pins = [];
   $('#topic').value = ''; stage(); renderPins(); ui();
   await loadLib().catch(() => {});
 }
 
 // After a mouse click the button keeps focus, and Enter would then re-activate it instead of pinning.
-const blurIfMouse = (e) => { if (e.detail > 0) e.currentTarget.blur(); };
+function blurIfMouse(e) { if (e.detail > 0) e.currentTarget.blur(); }
 $('#rec').onclick = (e) => { blurIfMouse(e); if (state === 'ready') startRecording(); else stopRecording(); };
 $('#pause').onclick = (e) => {
   blurIfMouse(e);
@@ -243,11 +325,12 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ---------- library ---------- */
+function setStats(st) { $('#n').textContent = st.count; $('#tot').textContent = short(st.totalSeconds); $('#streak').textContent = st.streak; }
 async function loadLib() {
+  if (!store) return;
   try {
     const r = await store.list(today());
-    lib = r.lectures;
-    $('#n').textContent = r.stats.count; $('#tot').textContent = short(r.stats.totalSeconds); $('#streak').textContent = r.stats.streak;
+    lib = r.lectures; setStats(r.stats);
   } catch (e) { if (!handleAuthLoss(e)) toast(e.message); }
   renderLib();
 }
@@ -266,7 +349,7 @@ $('#shelf').onclick = (e) => { const b = e.target.closest('.open'); if (b) openP
 
 /* ---------- player ---------- */
 const dlg = $('#player'), vid = $('#pVideo');
-let cur = null, media = null;
+let cur = null, media = null, curPins = [];
 async function openPlayer(id) {
   let r;
   try { r = await store.get(id); media = await store.media(id); } catch (e) { if (!handleAuthLoss(e)) toast(e.message); return; }
@@ -276,16 +359,19 @@ async function openPlayer(id) {
   $('#pDownload').href = media.download;
   if (media.filename) $('#pDownload').download = media.filename; else $('#pDownload').removeAttribute('download');
   vid.src = media.src;
+  curPins = r.pins;
   renderPlayerPins(r.pins);
   dlg.showModal();
 }
-// MediaRecorder WebM has no duration header; this makes the seek bar work.
-vid.addEventListener('loadedmetadata', () => {
-  if (vid.duration === Infinity) {
-    vid.currentTime = 1e101;
-    vid.addEventListener('timeupdate', () => { vid.currentTime = 0; }, { once: true });
-  }
-});
+vid.addEventListener('loadedmetadata', () => seekable(vid));
+$('#pRew').onclick = () => { vid.currentTime = seekTarget(curPins, vid.currentTime, -1); };
+$('#pFf').onclick = () => { vid.currentTime = seekTarget(curPins, vid.currentTime, 1, { end: Number.isFinite(vid.duration) ? vid.duration : Infinity }); };
+$('#pPlay').onclick = () => { if (vid.paused) vid.play().catch(() => {}); else vid.pause(); };
+const playIcon = () => {
+  $('#pPlay .i-play').hidden = !vid.paused; $('#pPlay .i-pause').hidden = vid.paused;
+  $('#pPlay').setAttribute('aria-label', vid.paused ? 'Play' : 'Pause');
+};
+vid.addEventListener('play', playIcon); vid.addEventListener('pause', playIcon); vid.addEventListener('emptied', playIcon);
 function renderPlayerPins(list) {
   const ul = $('#pPins');
   if (!list.length) { ul.innerHTML = '<li class="none">No pins on this lecture.</li>'; return; }
@@ -302,7 +388,7 @@ function renderPlayerPins(list) {
     inp.onkeydown = (e) => { if (e.key === 'Enter') inp.blur(); };
     const x = document.createElement('button'); x.className = 'pinx'; x.textContent = '×'; x.setAttribute('aria-label', 'Delete pin');
     x.onclick = async () => {
-      try { await store.deletePin(p.id); li.remove(); const l = lib.find((z) => z.id === cur.id); if (l) l.pins--; renderLib();
+      try { await store.deletePin(p.id); curPins = curPins.filter((z) => z.id !== p.id); li.remove(); const l = lib.find((z) => z.id === cur.id); if (l) l.pins--; renderLib();
         if (!$('#pPins').children.length) renderPlayerPins([]); } catch (e) { toast(e.message); }
     };
     li.append(at, inp, x); ul.append(li);
@@ -334,12 +420,15 @@ async function boot() {
     const b = $('.seg button[data-mode="Screen and voice"]'); b.disabled = true; b.title = 'Screen sharing isn’t available in this browser';
     b.dataset.mode = 'Screen and voice';
   }
-  store = await detectStore();
-  if (store.kind === 'local') {
+  const server = await detectStore();
+  local = !server; store = server;
+  configureAuth();
+  if (local) {
     // No server: everything stays in this browser. Same design, no sign-in needed.
     $('#lede').textContent = 'The speaker’s voice is always recorded. Add the screen or slide deck they are presenting, and Lectra keeps the recording and your timestamped notes together, privately, in this browser.';
     $('#libLede').textContent = 'Every recording and set of notes you’ve made in this browser, one cassette per lecture. Nothing is uploaded.';
   }
+  if (local) { showAuth(); return; } // every visit starts at the login page; the profile key lives in memory only
   try { user = await store.me(); await enterApp(); }
   catch { showAuth(); }
 }

@@ -119,3 +119,13 @@ dialog::backdrop{background:rgba(0,0,0,.72)}
 .dlg-meta{margin:10px 0 14px}
 .dlg-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 .dlg a.link{text-decoration:none;display:inline-block}
+
+.replay{margin:34px 0 8px;max-width:470px}
+.replay video{width:100%;aspect-ratio:16/9;background:#000;border:1px solid var(--line);border-radius:8px;display:block}
+.replaybar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.replaybar .mono{color:var(--rec)}
+.notes .pinat{color:var(--rec);font-family:var(--mono);font-size:14px}
+.dlg-ctl{display:flex;align-items:center;gap:14px;margin:14px 0 6px;flex-wrap:wrap}
+.authlinks{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.textlink{background:none;border:0;padding:0;color:var(--mute);font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.textlink:hover{color:var(--ink)}
