@@ -2,9 +2,9 @@
 
 ## ▶ [Open Lectra](https://kaylalkahn.github.io/lectra/)
 
-**https://kaylalkahn.github.io/lectra/**: create a profile and start recording. No install, no API keys, no server.
+**https://kaylalkahn.github.io/lectra/**:
 
-Record a lecture with the speaker's voice plus their screen or slide deck, pin timestamped notes while it runs, rewind what you just missed without stopping the recording, and revise later from a library where every lecture is a cassette. Everything runs and stays in your browser.
+Record your screen to capture lecture visuals and audio, including everything your professor says and shows. Lectra automatically combines both into a video you can revisit anytime, so you never have those moments of "What the hell did I write?"
 
 Best in a recent Chrome or Edge on a desktop. Allow microphone access when asked.
 
@@ -21,28 +21,7 @@ Best in a recent Chrome or Edge on a desktop. Allow microphone access when asked
 
 ## How it works
 - 100% browser-native: `MediaRecorder`, `getDisplayMedia`, Web Audio, Canvas, IndexedDB, Web Crypto. PDF slides are rendered locally with pdf.js (vendored).
-- No server, no AI, no third-party requests. Fonts are self-hosted. Recordings never leave your device unless you download them.
-- The site is the `docs/` folder, served by GitHub Pages.
-
-## Run it locally
-```bash
-npx serve docs        # or any static file server, then open the printed localhost URL
-```
-
-### Optional: server mode with accounts
-`server/` is an optional Node 22.13+ backend that adds email/password accounts and stores recordings on the server. The same front end detects it automatically.
-```bash
-npm install && npm start   # http://localhost:3000
-```
-Env vars: `PORT`, `DATA_DIR`, `COOKIE_SECURE=1` behind HTTPS, `TRUST_PROXY=1` behind a proxy, `MAX_LECTURE_MB`. A `Dockerfile` is included (not build-tested).
-
-## Tests
-```bash
-npm install && npm test                    # API + property-based tests (fast-check)
-npm i --no-save playwright && npx playwright install chromium
-node test/e2e.mjs                          # real browser vs. a Pages-style static host
-MODE=server node test/e2e.mjs              # real browser vs. the optional server
-```
+- No server, no AI, no third-party requests. Recordings never leave your device unless you download them.
 
 ## Known limitations
 - Profiles live in one browser on one device; they don't sync. Clearing site data deletes them; download anything you want to keep.
@@ -56,8 +35,5 @@ MODE=server node test/e2e.mjs              # real browser vs. the optional serve
 
 ## Built with Kiro
 Specs, steering docs and agent hooks are in [`.kiro/`](.kiro).
-
-## Credits
-Fonts: Instrument Sans and IBM Plex Mono (SIL Open Font License). PDF rendering: [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0). Licenses in `docs/fonts` and `docs/vendor/pdfjs`.
 
 MIT © 2026 Kayla Kahn
