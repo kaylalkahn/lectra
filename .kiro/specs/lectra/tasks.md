@@ -3,7 +3,7 @@
 - [x] 1. Scaffold project, spec, .gitignore, env example
 - [x] 2. Server: db schema, auth, rate limit
 - [x] 3. Server: lectures, chunk upload, finish/recover, media streaming, pins
-- [x] 4. Client: port original design into public/ (css + html), auth overlay
+- [x] 4. Client: port original design into public/ (moved to docs/ in task 17) (css + html), auth overlay
 - [x] 5. Client: real recording (screen), pause, drift-free clock, chunk upload
 - [x] 6. Client: slides mode (PDF/images -> canvas stream)
 - [x] 7. Client: pins with notes, prev/next
@@ -18,3 +18,10 @@
 - [x] 14. Steering docs (product, tech, design) and agent hooks (test-on-save, protect-.kiro)
 - [x] 15. Fix: Enter after a mouse click on Record/Pause stopped/toggled instead of pinning (regression test in e2e)
 - [x] 16. Fix: clock jumped back while saving; rate limiter counted successful logins; AudioContext could hang/record silence; README Node version (needs 22.13+); graceful DB close on shutdown
+
+## Public link (GitHub Pages)
+- [x] 17. Move client to `docs/`, relative URLs, vendor pdf.js, meta CSP
+- [x] 18. `store.js`: LocalStore (IndexedDB) + ServerStore behind one interface; auto-detect
+- [x] 19. Local mode: no sign-in, copy says "in this browser", crash recovery from IndexedDB
+- [x] 20. e2e runs against a Pages-like static host under /lectra/ and against the server; assert no third-party requests
+- [x] 21. Enable GitHub Pages from `main:/docs`, set repo website link

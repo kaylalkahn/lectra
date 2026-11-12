@@ -5,7 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { openDb } from './db.js';
-import { streak } from './streak.js';
+import { streak } from '../docs/streak.js';
 
 const scrypt = promisify(crypto.scrypt);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -284,8 +284,7 @@ export function createApp({ dataDir, secureCookies = false, maxLectureBytes = 4 
   app.get('/healthz', (req, res) => { db.prepare('SELECT 1').get(); res.type('text').send('ok'); });
 
   // ---------- static ----------
-  app.use('/vendor/pdfjs', express.static(path.join(root, 'node_modules/pdfjs-dist/build')));
-  app.use(express.static(path.join(root, 'public')));
+  app.use(express.static(path.join(root, 'docs')));
   app.use('/api', (req, res) => fail(res, 404, 'Not found.'));
 
   // eslint-disable-next-line no-unused-vars

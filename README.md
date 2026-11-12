@@ -1,46 +1,58 @@
 # Lectra
 
-Record a lecture (the speaker's voice plus their screen or slide deck), pin timestamped notes while it runs, and revise from your library later. Each lecture is a cassette. **There are no AI features.**
+## ▶ [Open Lectra](https://kaylalkahn.github.io/lectra/)
 
-## Run it
-Requires **Node 22.13+** (uses the built-in `node:sqlite`, which is flag-free from 22.13). No native builds, no API keys.
+**https://kaylalkahn.github.io/lectra/**: opens straight into the app. No account, no install, no API keys.
 
-```bash
-npm install
-npm start            # http://localhost:3000
-```
-Microphone and screen capture only work on `localhost` or HTTPS.
+Record a lecture with the speaker's voice plus their screen or slide deck, pin timestamped notes while it runs, and revise later from a library where every lecture is a cassette. Everything runs and stays in your browser.
 
-Config (environment variables, see `.env.example`): `PORT`, `DATA_DIR` (SQLite db + recordings, default `./data`), `COOKIE_SECURE=1` when served over HTTPS, `TRUST_PROXY=1` behind a reverse proxy, `MAX_LECTURE_MB`.
+Best in a recent Chrome or Edge on a desktop. Allow microphone access when asked.
 
-## Deploy (public link)
-The app is one Node process plus a data folder, so any host that runs a Dockerfile works. Microphone capture needs **HTTPS**, which these hosts provide.
-
-- **Fly.io (recommended, keeps data):** `fly launch --no-deploy --copy-config`, `fly volumes create lectra_data --size 3`, `fly deploy`. Uses `fly.toml`. Needs an account with a card on file.
-- **Render (quickest, data resets):** New > Blueprint > pick this repo (uses `render.yaml`). The free plan has an ephemeral disk, so accounts/recordings are lost on restart or sleep. Add a paid persistent disk to keep them.
-- Set `COOKIE_SECURE=1` and `TRUST_PROXY=1` behind HTTPS (already set in the configs). Health check: `GET /healthz`.
-- The `Dockerfile` and host configs were **not build-tested** in the development sandbox (no container runtime). The production install (`npm ci --omit=dev` + `node server/index.js`) was tested.
+---
 
 ## What it does
-- Accounts (email + password), per-user private library.
-- **Screen and voice:** share a screen/window/tab; its audio (if offered) is mixed with the mic.
-- **Slides and voice:** load a PDF or images, change slides with buttons or arrow keys; the slide canvas plus mic is recorded.
-- Pause/resume, drift-free clock, Enter (or "Pin moment") to pin, editable pin notes, prev/next pin.
-- Chunked upload every 5 s: if the tab dies mid-lecture, what was uploaded is recovered on next login.
-- Library: search, player with pin seeking, rename, delete, download, real stats and day streak.
+- **Screen and voice:** share a screen, window or tab. Its audio (if offered) is mixed with your mic.
+- **Slides and voice:** load a PDF or images and step through them with buttons or the arrow keys. The slide shown plus your mic is what gets recorded.
+- Pause/resume with a drift-free clock. **Enter** (or "Pin moment") pins the current time; give each pin a note.
+- Saves as it records (every 5 s). If the tab crashes or closes, the lecture is recovered next time you open Lectra.
+- Library: search, play back, click a pin to jump to it, rename, delete, download the video. Real stats and day streak.
+
+## How it works
+- 100% browser-native: `MediaRecorder`, `getDisplayMedia`, Web Audio, Canvas, IndexedDB. PDF slides are rendered locally with pdf.js (vendored).
+- No server, no AI, no third-party requests. Fonts are self-hosted. Recordings never leave your device unless you download them.
+- The site is the `docs/` folder, served by GitHub Pages.
+
+## Run it locally
+```bash
+npx serve docs        # or any static file server, then open the printed localhost URL
+```
+
+### Optional: server mode with accounts
+`server/` is an optional Node 22.13+ backend that adds email/password accounts and stores recordings on the server. The same front end detects it automatically.
+```bash
+npm install && npm start   # http://localhost:3000
+```
+Env vars: `PORT`, `DATA_DIR`, `COOKIE_SECURE=1` behind HTTPS, `TRUST_PROXY=1` behind a proxy, `MAX_LECTURE_MB`. A `Dockerfile` is included (not build-tested).
 
 ## Tests
 ```bash
-npm test                                   # API tests (auth, ownership, chunks, Range, streak, recovery)
+npm install && npm test                    # API + property-based tests (fast-check)
 npm i --no-save playwright && npx playwright install chromium
-node test/e2e.mjs                          # real-browser flow with fake mic/screen devices
+node test/e2e.mjs                          # real browser vs. a Pages-style static host
+MODE=server node test/e2e.mjs              # real browser vs. the optional server
 ```
 
 ## Known limitations
-- Recordings are WebM from `MediaRecorder` (MP4 on Safari). Browsers write no duration header, so the player uses a seek workaround; downloaded files may show no duration in some players.
-- Firefox can't capture screen audio; mobile browsers generally have no screen capture (the app falls back to Slides mode).
-- Only tested in Chromium. Safari/Firefox are untested.
-- Recovery of an interrupted recording runs on next login; a second tab recording simultaneously would be finalized by it.
-- No password reset, email verification, or account deletion yet. Storage is local disk, not object storage.
-- Slide images are read in the browser; the slides themselves aren't saved, only the recorded video.
-- Fonts (Instrument Sans, IBM Plex Mono; SIL OFL) are self-hosted in `public/fonts`, so the app makes no third-party requests.
+- Browser storage is per browser and per device. Clearing site data deletes your lectures; download anything you want to keep.
+- Recordings are WebM from `MediaRecorder` (MP4 on Safari). Browsers write no duration header; the in-app player handles this, but some external players may not show a duration.
+- Firefox can't capture tab or system audio; phones generally have no screen capture (use Slides mode).
+- Tested in Chromium. Firefox and Safari are untested.
+- Slide files aren't stored, only the recorded video.
+
+## Built with Kiro
+Specs, steering docs and agent hooks are in [`.kiro/`](.kiro).
+
+## Credits
+Fonts: Instrument Sans and IBM Plex Mono (SIL Open Font License). PDF rendering: [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0). Licenses in `docs/fonts` and `docs/vendor/pdfjs`.
+
+MIT © 2026 Kayla Kahn

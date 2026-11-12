@@ -4,9 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="description" content="Record a lecture with your voice plus screen or slides, pin timestamped notes, and revise later. Runs in your browser.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'">
 <title>Lectra: rewind your understanding</title>
-<link rel="preload" href="/fonts/instrument-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css">
+<link rel="preload" href="fonts/instrument-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <header class="top" id="top">
@@ -16,7 +18,7 @@
 
 <main id="record">
   <h1>Record it once. Revise it any time.</h1>
-  <p class="lede">The speaker’s voice is always recorded. Add the screen or slide deck they are presenting, and Lectra keeps the recording and your timestamped notes together on your account.</p>
+  <p class="lede" id="lede">The speaker’s voice is always recorded. Add the screen or slide deck they are presenting, and Lectra keeps the recording and your timestamped notes together on your account.</p>
   <div class="banner" id="unsupported" hidden>This browser can’t record. Lectra needs MediaRecorder and microphone access. Use a recent Chrome, Edge, Firefox or Safari over HTTPS or localhost. Your library still works.</div>
   <div class="grid" id="rgrid">
     <section>
@@ -61,7 +63,7 @@
 
 <main id="library" hidden>
   <div class="head">
-    <div><h1 style="margin-bottom:10px">Library</h1><p class="lede" style="margin:0">Every recording and set of notes on your Lectra account, one cassette per lecture.</p></div>
+    <div><h1 style="margin-bottom:10px">Library</h1><p class="lede" id="libLede" style="margin:0">Every recording and set of notes on your Lectra account, one cassette per lecture.</p></div>
     <div class="libhead"><input id="q" type="text" placeholder="Search your cassettes" aria-label="Search your cassettes"><button class="btn" data-go="record">New recording</button></div>
   </div>
   <div class="shelf" id="shelf"></div>
@@ -105,6 +107,6 @@
 </div>
 <div class="toast" id="toast" hidden role="status"></div>
 
-<script type="module" src="/app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

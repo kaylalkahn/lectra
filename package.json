@@ -12,8 +12,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "express": "^5.3.0",
-    "pdfjs-dist": "^6.5.438"
+    "express": "^5.3.0"
   },
   "devDependencies": {
     "fast-check": "^4.10.2"

@@ -28,7 +28,7 @@ export class Uploader {
   async send(seq, blob, elapsed) {
     for (let attempt = 0; ; attempt++) {
       try {
-        const res = await fetch(`/api/lectures/${this.id}/chunk?seq=${seq}&elapsed=${elapsed}`, {
+        const res = await fetch(`api/lectures/${this.id}/chunk?seq=${seq}&elapsed=${elapsed}`, {
           method: 'PUT', body: blob, credentials: 'same-origin', headers: { 'content-type': 'application/octet-stream' },
         });
         if (res.ok) return;

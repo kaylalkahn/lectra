@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import fc from 'fast-check';
-import { fmt, short } from '../public/format.js';
-import { streak } from '../server/streak.js';
+import { fmt, short } from '../docs/format.js';
+import { streak } from '../docs/streak.js';
 import { createApp } from '../server/app.js';
 
 const BASE = Date.UTC(2026, 0, 1);

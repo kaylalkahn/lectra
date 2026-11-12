@@ -3,8 +3,8 @@ const W = 1280, H = 720;
 const natural = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true });
 let pdfjsPromise;
 function pdfjs() {
-  pdfjsPromise ||= import('/vendor/pdfjs/pdf.min.mjs').then((m) => {
-    m.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.mjs';
+  pdfjsPromise ||= import(new URL('./vendor/pdfjs/pdf.min.mjs', import.meta.url).href).then((m) => {
+    m.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdfjs/pdf.worker.min.mjs', import.meta.url).href;
     return m;
   });
   return pdfjsPromise;

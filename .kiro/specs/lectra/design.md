@@ -1,8 +1,9 @@
 # Lectra: Design
 
 ## Stack
+- **Default (public link):** static site in `docs/` on GitHub Pages; `LocalStore` keeps lectures, chunks and pins in IndexedDB. `detectStore()` probes `api/me` and only uses the server if it answers JSON.
 - **Server:** Node 22, Express, built-in `node:sqlite` (no native build), media files on disk in `DATA_DIR/media`.
-- **Client:** static HTML/CSS/vanilla JS (ES modules) served from `public/`. pdf.js is served from `node_modules` for PDF slides.
+- **Client:** static HTML/CSS/vanilla JS (ES modules) in `docs/`, relative URLs only. pdf.js vendored in `docs/vendor/pdfjs`.
 - **Auth:** scrypt password hashes, random session token (stored hashed), HttpOnly SameSite=Lax cookie, in-memory rate limit on auth.
 
 ## Data model

@@ -2,8 +2,13 @@
 
 Lectra records a lecture (speaker's voice plus screen or slides), lets the user pin timestamped notes, and keeps everything on their account for later revision. **No AI features are in scope** (no transcription, summaries or generated study notes).
 
-## R1 Accounts
-1. A visitor can create an account with email + password (min 8 chars) and log in/out.
+## R0 Zero-setup public link
+1. Opening the public URL (GitHub Pages) goes straight to the Record screen: no account, no API key, no install.
+2. Recordings, pins and the library are stored in the browser (IndexedDB) and survive reloads; nothing is uploaded.
+3. The page makes no third-party network requests.
+
+## R1 Accounts (optional server mode only)
+1. When run with the Node server, a visitor can create an account with email + password (min 8 chars) and log in/out.
 2. Passwords are stored as salted scrypt hashes; sessions use an HttpOnly cookie.
 3. A user can only ever see, play, edit or delete their own lectures.
 

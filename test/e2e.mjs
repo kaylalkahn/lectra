@@ -1,15 +1,32 @@
 // Browser end-to-end test. Not part of `npm test` because it needs Playwright + Chromium:
-//   npm i --no-save playwright && npx playwright install chromium && node test/e2e.mjs
+//   npm i --no-save playwright && npx playwright install chromium
+//   node test/e2e.mjs          -> static site under /lectra/ (exactly how GitHub Pages serves docs/), browser storage
+//   MODE=server node test/e2e.mjs -> optional Node server with accounts
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { createApp } from '../server/app.js';
 
+const MODE = process.env.MODE === 'server' ? 'server' : 'static';
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lectra-e2e-'));
-const server = await new Promise((r) => { const s = createApp({ dataDir: dir }).listen(0, () => r(s)); });
-const url = `http://127.0.0.1:${server.address().port}/`;
+const docs = fileURLToPath(new URL('../docs/', import.meta.url));
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2' };
+// Minimal GitHub-Pages-like static host: serves docs/ under /lectra/, 404s everything else (incl. api/*).
+const staticHost = () => http.createServer((req, res) => {
+  const u = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+  if (!u.startsWith('/lectra/')) { res.writeHead(404, { 'content-type': 'text/html' }); return res.end('<h1>404</h1>'); }
+  let f = path.join(docs, u.slice('/lectra/'.length) || 'index.html');
+  if (!f.startsWith(docs) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404, { 'content-type': 'text/html' }); return res.end('<h1>404</h1>'); }
+  res.writeHead(200, { 'content-type': TYPES[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res);
+});
+const server = await new Promise((r) => { const s = (MODE === 'server' ? createApp({ dataDir: dir }) : staticHost()).listen(0, () => r(s)); });
+const url = `http://127.0.0.1:${server.address().port}/${MODE === 'server' ? '' : 'lectra/'}`;
+console.log('mode:', MODE, url);
 
 const pdf = `%PDF-1.4
 1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
@@ -38,13 +55,14 @@ const ctx = await browser.newContext({ permissions: ['microphone'], acceptDownlo
 const page = await ctx.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
-// 401 (logged-out /api/me) and 400 (short-password check) are expected network errors
-page.on('console', (m) => { if (m.type() === 'error' && !/status of (401|400)/.test(m.text())) errors.push('console: ' + m.text()); });
+// 401 (logged-out api/me), 400 (short-password check) and 404 (api/me probe on a static host) are expected
+page.on('console', (m) => { if (m.type() === 'error' && !/status of (401|400|404)/.test(m.text())) errors.push('console: ' + m.text()); });
 page.on('dialog', (d) => d.accept());
 const step = (m) => console.log('✓', m);
 const wait = (ms) => page.waitForTimeout(ms);
 
 await page.goto(url);
+if (MODE === 'server') {
 await page.waitForSelector('#auth:not([hidden])');
 // wrong password path
 await page.click('[data-auth=signup]');
@@ -54,6 +72,12 @@ await page.waitForFunction(() => /at least 8/.test(document.querySelector('#auth
 await page.fill('#aPass', 'password123'); await page.click('#authSubmit');
 await page.waitForSelector('#auth', { state: 'hidden' });
 step('signup + validation');
+} else {
+  await page.waitForFunction(() => document.querySelector('#auth').hidden && !document.querySelector('#record').hidden);
+  assert.match(await page.textContent('#lede'), /in this browser/);
+  assert.equal(await page.isVisible('#logout'), false);
+  step('opens straight into the app, no sign-in, browser storage');
+}
 
 // ---- Slides and voice ----
 await page.click('[data-mode="Slides and voice"]');
@@ -151,10 +175,10 @@ step('rename persists in library');
 
 // reload keeps session and data
 await page.reload();
-await page.waitForSelector('#auth', { state: 'hidden' });
+await page.waitForFunction(() => document.querySelector('#auth').hidden);
 await page.click('#tab-library');
 await page.waitForSelector('.item h3:has-text("Renamed lecture")');
-step('reload keeps session + library');
+step('reload keeps library');
 
 // delete
 await page.click('.item .open');
@@ -180,6 +204,11 @@ await p2.goto(url + '#library');
 await p2.waitForSelector('.item h3:has-text("Crash test")', { timeout: 10000 });
 step('interrupted recording recovered into library');
 
+if (MODE === 'static') {
+  const bad = []; p2.on('request', (r) => { if (!r.url().startsWith(url) && !r.url().startsWith('blob:') && !r.url().startsWith('data:')) bad.push(r.url()); });
+  await p2.reload(); await p2.waitForSelector('.item'); assert.deepEqual(bad, [], 'no third-party requests');
+  step('no third-party network requests');
+}
 console.log(errors.length ? 'JS errors:\n' + errors.join('\n') : 'no JS errors');
 await browser.close(); server.close(); fs.rmSync(dir, { recursive: true, force: true });
 process.exit(errors.length ? 1 : 0);

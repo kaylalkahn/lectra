@@ -1,10 +1,10 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: "public/**/*.{css,html,js}"
+fileMatchPattern: "docs/**/*.{css,html,js}"
 ---
 # Lectra: design system (preserve it)
 
-Modern-retro tech: warm near-black, cream ink, one red "REC" accent. Tokens live in `:root` of `public/styles.css`:
+Modern-retro tech: warm near-black, cream ink, one red "REC" accent. Tokens live in `:root` of `docs/styles.css`:
 `--bg #0e0e0d`, `--panel #171716`, `--line #2b2b28`, `--ink #ece7da`, `--mute #8d8a80`, `--rec #e5483a`; fonts Instrument Sans (UI) and IBM Plex Mono (time, data).
 
 Rules

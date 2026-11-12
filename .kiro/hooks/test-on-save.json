@@ -5,7 +5,7 @@
       "name": "Run tests when source or test code is saved",
       "trigger": "PostFileSave",
       "description": "Runs the API and property-based tests after any JS source or test file is saved, so regressions surface immediately.",
-      "matcher": "(server|test|public)/[^/]*\\.m?js$",
+      "matcher": "(server|test|docs)/[^/]*\\.m?js$",
       "action": {
         "type": "command",
         "command": "if [ -f package.json ]; then npm test --silent 2>&1 | tail -15; else npm test --silent --prefix lectra 2>&1 | tail -15; fi",
